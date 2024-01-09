@@ -35,10 +35,8 @@ class SAU_in:
     # 
     Vw = 0
 class SAU_out:
-    P12_dr = 0.2
-    P34_dr = 0.2
-    eps = 90
-    de = float(0)
+    P = 0.1  # Положение дросселя двигателя в диапазоне от 0 до 1
+    de = float(0)   # Угол отклонения руля высоты
 # Опишем для продольного движения
 class UAV:
 
@@ -132,24 +130,14 @@ class UAV:
         # Характерные площади
         self.fSx = self.Sw
         # self.fBx = 0.3
-        # self.fLx = 0.3
+        self.fLx = 0.3
 
-        # Иницируем ВМГ по схеме в описании задачи
-        # # Это расстояние от ВМГ до ц.м. вдоль оси OZ1, м (ВМГ 2,3)
-        # self.lxd = 1.75
-        # # Расстояние от оси вращения ВМГ первого крыла до ц.м. по оси OX1,м (ВМГ 1,2),м
-        # self.lz1 = 1
-        # # Расстояние от оси вращения ВМГ второго крыла до ц.м. по оси OX1,м (ВМГ 3,4),м
-        # self.lz2 = 0.84
-        # # Расстояние от оси вращения ВМГ первого крыла до ц.м. по оси OY1,м (ВМГ 1,2),м
-        # self.ly1 = 0.0035
-        # # Расстояние от оси вращения ВМГ первого крыла до ц.м. по оси OY1,м (ВМГ 3,4),м
-        # self.ly2 = 0.14
+        
 
         # ВМГ
 
         self.drossel = np.linspace(0, 1, 10, endpoint=True) # Положение дросселя
-        self.P_one = np.linspace(12, 30, endpoint=True) # Ньютон
+        self.P_one = np.linspace(12, 30, 10, endpoint=True) # Ньютон
 
         # Инициализация начального состояния
       
@@ -182,14 +170,15 @@ class UAV:
         self.u = SAU_out()
         # Инициализация записи
         columns_names=list(["Time","H","L","Vgx","Vgy","Va","Theta","Tang","AoA","Vpr_kmh"])
-        columns_names_SAU=list(["P12_dr","P34_dr","delta_elerons","eps"])
-        columns_names_debug=list(["Wz1","Mza","P1","P2","P3","P4","Mzp"])
+        columns_names_SAU=list(["P","delta_elerons"])
+        columns_names_debug=list(["Wz1","Mza","P1","Mzp"])
 
         columns_names_data = columns_names + columns_names_SAU + columns_names_debug
 
         data = [self.fTime,self.fY,self.fX,float(self.Vg[0]), float(self.Vg[1]),self.fVa,self.fTet,self.fTan,self.fAoA,self._Vp*3.6]
-        data_sau = [self.u.P12_dr,self.u.P34_dr,self.u.de,self.u.eps]
-        data_debug = [0,0,0,0,0,0,0]
+        data_sau = [self.u.P,self.u.de]
+        
+        data_debug = [0,0,0,0]
         data_all = data + data_sau + data_debug
 
         self.db = DataFrame([data_all],columns = columns_names_data)
@@ -275,13 +264,13 @@ class UAV:
         self.fGmsDt = degrees((self.fWxa - (self.fWya*cos(Gms_rad)-self.fWza*sin(Gms_rad)))*tan(Tet_rad))
     def write_DataFrame(self):
         columns_names=list(["Time","H","L","Vgx","Vgy","Va","Theta","Tang","AoA","Vpr_kmh"])
-        columns_names_SAU=list(["P12_dr","P34_dr","delta_elerons","eps"])
-        columns_names_debug=list(["Wz1","Mza","P1","P2","P3","P4","Mzp"])
+        columns_names_SAU=list(["P", "delta_elerons"])
+        columns_names_debug=list(["Wz1","Mza","P1"])
         columns_names_data = columns_names + columns_names_SAU +columns_names_debug
 
         data = [self.fTime,self.fY,self.fX,float(self.Vg[0]), float(self.Vg[1]),self.fVa,self.fTet,self.fTan,self.fAoA,self._Vp*3.6]
-        data_sau = [self.u.P12_dr,self.u.P34_dr,self.u.de,self.u.eps]
-        data_debug = [self.fWz1,self.Mza,self.P1,self.P2,self.P3,self.P4,self.Mzp]
+        data_sau = [self.u.P, self.u.de]
+        data_debug = [self.fWz1,self.Mza,self.P1]
         data_all = data + data_sau + data_debug
 
         frame = DataFrame([data_all],columns = columns_names_data)
@@ -292,34 +281,24 @@ class UAV:
         # Вектор управления извне
         self.u = u
         # Тяга от дросселя, Н
-        P1 = self.calc_VMG(u.P12_dr)
-        P2 = self.calc_VMG(u.P12_dr)
-        P3 = self.calc_VMG(u.P34_dr)
-        P4 = self.calc_VMG(u.P34_dr)
+        P1 = self.calc_VMG(u.P)
 
         # На запись
         self.P1 = P1
-        self.P2 = P2
-        self.P3 = P3
-        self.P4 = P4
 
         # Элероны, град.
         self.delta_elerons = u.de
 
         # Угол поворота ВМГ, град
-        self.eps1 = u.eps
-        self.eps2 = u.eps
+        self.eps1 = 90
 
         SinE1 = sin(radians(self.eps1))
-        CosE1 = cos(radians(self.eps1))
-        SinE2 = sin(radians(self.eps2))
-        CosE2 = cos(radians(self.eps2))
 
 
         # Тяга в связанной СК
 
-        self.Px1 = P1*SinE1 + P2*SinE1 + P3*SinE2 + P4*SinE2
-        self.Py1 = P1*CosE1 + P2*CosE1 + P3*CosE2 + P4*CosE2
+        self.Px1 = P1*SinE1
+        # self.Py1 = P1*CosE1
 
         # Расчет плотности на текущей выосте и скорости
         # Расчет напора набегающего потока
@@ -337,11 +316,11 @@ class UAV:
         self.Gxyz = np.matmul(self.speed_to_earth.transpose(),np.array([0,self.fG,0]))
         # Силы в связанной СК
         # ДУ
-        self.Fxyz_a_prop = np.matmul(self.speed_to_attach.transpose(),np.array([self.Px1,self.Py1,0]))
+        self.Fxyz_a_prop = np.matmul(self.speed_to_attach.transpose(),np.array([self.Px1,0, 0]))
         # Силы в скоростной СК
         # Аэродинамика, силы
         # Лобовое сопротивление
-        self.fXaForce = -self.fCxa(self.fAoA,self.delta_elerons) * self.fQ * self.fSx
+        self.fXaForce = -self.fCxa(self.fAoA) * self.fQ * self.fSx
         # Подъемная сила
         self.fYaForce = self.fCya(self.fAoA) * self.fQ * self.fSx
         # Ускорение в земной СК
@@ -377,7 +356,9 @@ class UAV:
         self.n1 = np.matmul(self.speed_to_attach,self.na)
         
         # Моменты, от аэродинамики
-        Mza = self.fmza(self.fAoA,self.delta_elerons) * self.fQ * self.fLx *0.3
+        self.cx = self.fCxa(self.fAoA)
+        self.cy = self.fCya(self.fAoA)
+        Mza = self.calculate_mz(self.fAoA, self.cx, self.cy, wz1=0, lift=0) * self.fQ * self.fLx *0.3
         self.Mza = Mza
         # Моменты от ДУ
 
