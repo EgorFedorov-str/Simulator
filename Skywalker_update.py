@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.optimize import minimize
 import math
-
+from math import degrees,radians
 
 class USkywalker2015_Aerodynamic():
       def __init__(self):
@@ -156,11 +156,6 @@ class USkywalker2015_Aerodynamic():
         self.mydn = 0
         
 
-      def compute_dynamic_pressure(aerodynamic_obj, H, V):
-        rho = 1.225*(1 - 2.2569e-05*H)**4.2586
-        q = 0.5*rho*V**2
-        return q
-
       def calculate_cx(self,AoA):
         cx0_wing_calc = self.cx0_wing * (1 - self.kint * self.Swf / self.Sw)
         cx1_wing_calc = self.cx1_wing * (1 - self.kint * self.Swf / self.Sw)
@@ -175,7 +170,7 @@ class USkywalker2015_Aerodynamic():
         cx2 = 1.02 * (cx2_wing_calc + cx2_tail_calc)
 
         AoA_rad = math.radians(AoA)
-        return cx0 + cx1 * AoA + cx2 * AoA * AoA
+        return cx0 + cx1 * AoA_rad + cx2 * AoA_rad * AoA_rad
 
       def calculate_cy(self,AoA):
         cy0 = self.cy0_wing + self.cy0_tail
@@ -187,25 +182,21 @@ class USkywalker2015_Aerodynamic():
         czb = self.cz1_wing + self.cz1_tail + self.czbf
         return czb * AoS
 
-      def calculate_moments(self, AoA, Cx, Cy, wz1, lift):
-        V = 10
+      def calculate_moments(self, AoA,cya,V, AoA_dot, wz1, lift):
+      
         mz0_bgo = self.mz0_wing + self.mzf + self.mzgd + self.mzp + self.mzpp
         mz1_bgo = self.mz1_wing
         mz2_bgo = self.mz2_wing
 
-        mxb_tail = self.kefvo * self.mx1_tail
-        myb_tail = self.kefvo * self.my1_tail
 
         kefgo = self.k * (1 + self.k_sigma * self.B)
         mz0_go = kefgo * self.mz0_tail
         mz1_go = kefgo * self.mz1_tail
         mz2_go = kefgo * self.mz2_tail
 
-        cy0 = self.cy0_wing + self.cy0_tail
-        cya = self.cy1_wing + self.cy1_tail
+   
 
-        cy1 = Cx * math.sin(AoA / 57.3) + Cy * math.cos(AoA / 57.3);
-        cx1 = Cx * math.cos(AoA / 57.3) - Cy * math.sin(AoA / 57.3);
+ 
         mz0 = mz0_bgo + mz0_go
         mza = (mz1_bgo + mz1_go) + 2 * (mz2_bgo + mz2_go) * AoA
         mzago = (2 * self.mz2_tail * AoA + self.mz1_tail)
@@ -216,39 +207,14 @@ class USkywalker2015_Aerodynamic():
         mz_wing_wz_ = mz_wing_wz_ / 57.3
         mzwz_ = mz_gof_wz_ + mz_wing_wz_
         mzwz = mzwz_ * self.ba / V
-        D_func = 0.1206 + 0.1814 / self.eta + 0.0980 / self.eta * self.eta;
-        mzadot_ = math.sqrt(kefgo) * mzago * self.Lgo / self.ba * D_func * cya;
-        mzadot = mzadot_ * self.ba / V
-        mz = mz0 * 0 + mzwz * wz1 + mza * AoA + lift * mzdv + mzadot * 0 * 57.3
+        D_func = 0.1206 + 0.1814 / self.eta + 0.0980 / self.eta * self.eta
+        mzadot_ = math.sqrt(kefgo) * mzago * self.Lgo / self.ba * D_func * cya
+        # mzadot = mzadot_ * self.ba / V
+        alpha_dot_ = AoA_dot*self.ba/V
+        mz = mz0*0 + mzwz * wz1 + mza * AoA + lift * mzdv + mzadot_ * degrees(alpha_dot_)
 
-        
         return mz
-      def simulate(self, Theta, Psi, gammaa):
-        dXg = Vk * np.cos(Theta) * np.cos(Psi)
-        dYg = Vk * np.sin(Theta)
-        dZg = -Vk * np.cos(Theta) * np.sin(Psi)
-
-        dVk = Rx / self.m - self.g * np.sin(Theta)
-        dTheta = (Ry * np.cos(gammaa) - Rz * np.sin(gammaa) - m * g * np.cos(Theta)) / m / Vk
-        dPsi = -(Ry * np.sin(gammaa) + Rz * np.cos(gammaa)) / m / Vk / np.cos(Theta)
-
-        dalpha = wz + np.tan(beta) * (wy * np.sin(alpha) - wx * np.cos(alpha)) - (
-                    Ry - m * g * np.cos(Theta) * np.cos(gammaa)) / m / Vk / np.cos(beta)
-        dbeta = wx * np.sin(alpha) + wy * np.cos(alpha) + (
-                    Rz + m * g * np.cos(Theta) * np.sin(gammaa)) / m / Vk
-
-        dpsi = (wy * np.cos(gamma) - wz * np.sin(gamma)) / np.cos(theta)
-        dtheta = wy * np.sin(gamma) + wz * np.cos(gamma)
-        dgamma = (wz * np.sin(gamma) - wy * np.cos(gamma)) * np.tan(theta) + wx
-
-        dwx = (Iyy * MRx + Ixy * MRy + Ixy * (Izz - Ixx - Iyy) * wx * wy + (
-                    Iyy * (Iyy - Izz) + Ixy ** 2) * wy * wz) / (Ixx * Iyy - Ixy ** 2)
-        dwy = (Ixx * MRy + Ixy * MRx + Ixy * (Ixx + Iyy - Izz) * wy * wz + (
-                    Ixx * (Izz - Ixx) - Ixy ** 2) * wx * wy) / (Ixx * Iyy - Ixy ** 2)
-        dwz = (MRz + (Ixx - Iyy) * wx * wy + Ixy * (wx ** 2 - wy ** 2)) / Izz
-
-        # Return derivatives
-        return [dXg, dYg, dZg, dVk, dTheta, dPsi, dalpha, dbeta, dpsi, dtheta, dgamma, dwx, dwy, dwz, d_tang]
+      
       def get_parameters(self):
         parameters = [
             self.lambda0, self.khi, self.psi_V, self.eta, self.zst_,
@@ -270,73 +236,6 @@ class USkywalker2015_Aerodynamic():
         ]
         return np.array(parameters)
 
-        # def set_parameters(self, parameters):
-        # (
-        #     self.lambda0, self.khi, self.psi_V, self.eta, self.zst_,
-        #     self.ksi2, self.ki, self.lf, self.hf, self.wf, self.lgo,
-        #     self.Lgo, self.bgo, self.khigo, self.lv, self.bv, self.lvo,
-        #     self.Lvo, self.bvo, self.khivo, self.Svo, self.yvo, self.bn,
-        #     self.be, self.Le, self.le, self.Sw, self.cx0_wing, self.cx1_wing,
-        #     self.cx2_wing, self.cy0_wing, self.cy1_wing, self.cz0_wing,
-        #     self.cz1_wing, self.mx0_wing, self.mx1_wing, self.my0_wing,
-        #     self.my1_wing, self.mz0_wing, self.mz1_wing, self.mz2_wing,
-        #     self.cx0_tail, self.cx1_tail, self.cx2_tail, self.cy0_tail,
-        #     self.cy1_tail, self.cz0_tail, self.cz1_tail, self.mx0_tail,
-        #     self.mx1_tail, self.my0_tail, self.my1_tail, self.mz0_tail,
-        #     self.mz1_tail, self.mz2_tail, self.Ixx, self.Iyy, self.Izz,
-        #     self.Ixy, self.mzwz, self.mza, self.mzdv, self.mzadot,
-        #     self.mxwx, self.mxwy, self.mxb, self.mxde, self.mzf, self.mzgd,
-        #     self.mzp, self.mzpp, self.mzp, self.mywx, self.mywy, self.myb,
-        #     self.myde, self.mydn
-        # ) = parameters
-
-      
-        def objective(self, params, t_data, X_data, Y_data, Z_data, Yaw_data, Pitch_data, Roll_data, H_data, L_data, V_data,
-                  lat_data, lon_data, tan_data, wx_data, wy_data, wz_data, Vx_data, Vy_data, Vz_data):
-          self.set_parameters(params)
-          # Моделирование движения
-          X_model, Y_model, Z_model, Yaw_model, Pitch_model, Roll_model, H_model, L_model, V_model, \
-          lat_model, lon_model, tan_model, wx_model, wy_model, wz_model, Vx_model, Vy_model, Vz_model = self.simulate(t_data)
-
-          # Разница между данными и моделью
-          error = np.concatenate([
-              X_data - X_model,
-              Y_data - Y_model,
-              Z_data - Z_model,
-              Yaw_data - Yaw_model,
-              Pitch_data - Pitch_model,
-              Roll_data - Roll_model,
-              H_data - H_model,
-              L_data - L_model,
-              V_data - V_model,
-              lat_data - lat_model,
-              lon_data - lon_model,
-              tan_data - tan_model,
-              wx_data - wx_model,
-              wy_data - wy_model,
-              wz_data - wz_model,
-              Vx_data - Vx_model,
-              Vy_data - Vy_model,
-              Vz_data - Vz_model
-          ])
-
-          return np.sum(error ** 2)
-
-        def optimize(self, t_data, X_data, Y_data, Z_data, Yaw_data, Pitch_data, Roll_data, H_data, L_data, V_data,
-                 lat_data, lon_data, tan_data, wx_data, wy_data, wz_data, Vx_data, Vy_data, Vz_data):
-          # Начальные значения параметров
-          initial_params = self.get_parameters()
-
-          # Оптимизация
-          result = minimize(self.objective, initial_params,
-                            args=(t_data, X_data, Y_data, Z_data, Yaw_data, Pitch_data, Roll_data, H_data, L_data, V_data,
-                                  lat_data, lon_data, tan_data, wx_data, wy_data, wz_data, Vx_data, Vy_data, Vz_data),
-                            method='L-BFGS-B')
-
-          # Получаем оптимальные параметры
-          optimized_params = result.x
-          self.set_parameters(optimized_params)
-          return optimized_params
 
 #  данные телеметрии
 t_data = [0.540681, 1.01617, 1.524803, 2.025008, 2.528205, 3.033129, 3.529344, 4.024273, 4.528166, 5.03059, 5.520191, 6.021328, 6.521206, 7.024735, 7.522662, 8.016132, 8.523443, 9.021043, 9.519763, 10.020839, 10.523409, 11.019663, 11.516958, 12.019306, 12.524587, 13.019237, 13.522451, 14.017725, 14.520527, 15.021486, 15.52177, 16.021942, 16.523697, 17.031635, 17.526648, 18.015903, 18.532206, 19.01767, 19.520054, 20.028341, 20.519499, 21.017576, 21.524736, 22.02195, 22.532293, 23.020821, 23.519682, 24.017954, 24.52302, 25.032635, 25.518934, 26.026217, 26.522844]
