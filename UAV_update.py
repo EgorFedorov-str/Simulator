@@ -16,8 +16,8 @@ class UAVstate0:
     Tet0 = 0    
     Tan0 = 1.5
     AoA0 = Tan0 - Tet0
-    Va0 = 200/3.6
-    H0 =  1000
+    Va0 = 40/3.6
+    H0 =  50
     L0 = 0
     de0 = 0
 # П
@@ -97,24 +97,6 @@ class UAV:
 
     def __init__(self,fStep,endtime,state0 = UAVstate0()):
         # Файл АДХ
-        # self.aero = loadmat("AeroStruct.mat")
-        
-        # Функция расчета АДХ
-        # self.fCya = lambda AoA:(polyval(self.aero ["K_Cya"][0],AoA))
-        # self.fCxya_el = lambda AoA,delta:(polyval(self.aero ["K_dCxa_1"][0],AoA)*(delta**2) + polyval(self.aero ["K_dCxa_2"][0],AoA)*delta + polyval(self.aero ["K_dCxa_3"][0],AoA))
-        # self.fCxa = lambda AoA,delta:(polyval(self.aero ["K_Cxa"][0],AoA) + self.fCxya_el(AoA,delta))
-        # self.fCya = self.calculate_cy()
-        # self.fCxa = self.calculate_cx()
-
-        delta_elern = np.linspace(-25, 25, 10, endpoint=True) # 
-        mzde_val = np.linspace(-0.4, 0.4, 10, endpoint=True) # 
-        mzde_func = interp1d(delta_elern,mzde_val)
-
-        # Функция расчета моментных характеристик (AoA, delta) - град
-        # self.fmza_el = lambda AoA,delta:(polyval(self.aero ["K_mz1_e"][0],AoA)*(delta**2) + polyval(self.aero ["K_mz2_e"][0],AoA)*delta + polyval(self.aero ["K_mz3_e"][0],AoA))
-        # self.fmza = lambda AoA,delta:((polyval(self.aero ["K_mz_a"][0],AoA) + self.fmza_el(AoA,delta) + mzde_func(delta)))
-        # self.calculate_mz = lambda AoA, deltaLift:(skywalker.mz0 * 0 + skywalker.mzwz * self.fWz1 + skywalker.mza * AoA + deltaLift * skywalker.mzdv + skywalker.mzadot * self.AoA_dt * 57.3)   
-        # self.fmza = self.calculate_mz()
 
         self.fEndTime = endtime
         self.fStep = fStep
@@ -130,7 +112,7 @@ class UAV:
         # Характерные площади
         self.fSx = self.Sw
         # self.fBx = 0.3
-        self.fLx = 0.3
+        self.fLx = self.ba
 
         
 
@@ -182,7 +164,6 @@ class UAV:
         data_all = data + data_sau + data_debug
 
         self.db = DataFrame([data_all],columns = columns_names_data)
-        what = 0
         # self.data = np.array([UAV_frame_prodol()])
 
     def fCxa(self, AoA):
@@ -200,8 +181,8 @@ class UAV:
         rho = 1.225*(1 - 2.2569e-05*H)**(4.2586)
         q = 0.5*rho*V**2
         return rho,q
-    def calculate_mz(self, AoA, Cx, Cy, wz1, lift):
-        return skywalker.calculate_moments(AoA, Cx, Cy, wz1, lift)   
+    def calculate_mz(self,AoA,cya,V, AoA_dot, wz1, lift):
+        return skywalker.calculate_moments( AoA,cya,V, AoA_dot, wz1, lift)   
     
     
   
@@ -289,16 +270,9 @@ class UAV:
         # Элероны, град.
         self.delta_elerons = u.de
 
-        # Угол поворота ВМГ, град
-        self.eps1 = 90
-
-        SinE1 = sin(radians(self.eps1))
-
-
         # Тяга в связанной СК
 
-        self.Px1 = P1*SinE1
-        # self.Py1 = P1*CosE1
+        self.Px1 = P1
 
         # Расчет плотности на текущей выосте и скорости
         # Расчет напора набегающего потока
@@ -358,14 +332,8 @@ class UAV:
         # Моменты, от аэродинамики
         self.cx = self.fCxa(self.fAoA)
         self.cy = self.fCya(self.fAoA)
-        Mza = self.calculate_mz(self.fAoA, self.cx, self.cy, wz1=0, lift=0) * self.fQ * self.fLx *0.3
+        Mza = self.calculate_mz(self.fAoA,0,1,0,0,0) * self.fQ * self.fLx * self.fSx
         self.Mza = Mza
-        # Моменты от ДУ
-
-        # Mzplx = self.lz1 * (P1 + P2) * CosE1 - self.lz2 * (P3 + P4) * CosE2
-        # Mzply = self.ly1 * (P1 + P2) * SinE1 - self.ly2 * (P3 + P4) * SinE2
-        # Mzp = Mzplx + Mzply
-        # self.Mzp = Mzp
 
 
         # Так как только продольный канал, моменты Mx1 и My1 не считаем
@@ -403,7 +371,7 @@ class UAV:
         dVx1 = self.dV1[0]
         dVy1 = self.dV1[1]
 
-        self.AoA_dt = -(Vx1 * dVx1 - Vy1 * dVy1) / (Vx1 * Vx1 + Vy1 * Vy1)
+        self.fAoADt = -(Vx1 * dVx1 - Vy1 * dVy1) / (Vx1 * Vx1 + Vy1 * Vy1)
 
         self.fTime = self.fTime + self.fStep
 
